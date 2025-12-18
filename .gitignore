@@ -1,0 +1,48 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+*.egg
+
+# --- Poetry ---
+.poetry/
+poetry.lock
+
+# --- Virtual environments ---
+.venv/
+venv/
+ENV/
+env/
+
+# --- SQLite / local state ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Logs ---
+*.log
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Editor ---
+.vscode/
+.idea/
+*.swp
+
+# --- Coverage / tests ---
+.coverage
+htmlcov/
+.pytest_cache/
+
+# --- Build ---
+dist/
+build/
+
+# --- Runtime configs ---
+configs/*.yaml
+!configs/*.example.yaml

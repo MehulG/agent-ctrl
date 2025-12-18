@@ -1,0 +1,31 @@
+[project]
+name = "ctrl"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Mehul Gaidhani",email = "mehulgaidhani@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "typer (>=0.20.0,<0.21.0)",
+    "rich (>=14.2.0,<15.0.0)",
+    "pydantic (>=2.12.5,<3.0.0)",
+    "pydantic-yaml (>=1.6.0,<2.0.0)",
+    "pyyaml (>=6.0.3,<7.0.0)",
+    "aiosqlite (>=0.22.0,<0.23.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.14.9,<0.15.0)",
+    "pytest (>=9.0.2,<10.0.0)"
+]
+
+[tool.poetry.scripts]
+ctrl = "ctrl.cli.main:app"
