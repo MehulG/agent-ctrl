@@ -1,7 +1,10 @@
 import typer
 from rich import print
 
+from ctrl.cli.policy import app as policy_app  # NEW
+
 app = typer.Typer(help="ctrl — agent control plane (v0)")
+app.add_typer(policy_app, name="policy")  # NEW
 
 @app.command()
 def version():
