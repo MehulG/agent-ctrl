@@ -46,3 +46,5 @@ build/
 # --- Runtime configs ---
 configs/*.yaml
 !configs/*.example.yaml
+
+.roo/
