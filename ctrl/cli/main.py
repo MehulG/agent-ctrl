@@ -22,6 +22,11 @@ def validate_config(
     load_and_validate(servers_path=servers, policy_path=policy)
     ensure_db(db_path=db_path)
     print("[green]OK[/green]")
+    
+@app.command("approvals-serve")
+def approvals_serve(host: str = "127.0.0.1", port: int = 8788):
+    import uvicorn
+    uvicorn.run("ctrl.approvals.api:app", host=host, port=port, reload=False)
 
 if __name__ == "__main__":
     app()

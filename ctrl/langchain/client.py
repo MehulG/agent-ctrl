@@ -12,8 +12,10 @@ import aiosqlite
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 
-from ctrl.config.loader import load_and_validate
+from ctrl.config.loader import load_and_validate, load_risk_config
 from ctrl.db.migrate import ensure_db
+from ctrl.policy.conditions import requires_approval
+from ctrl.risk.engine import RiskEngine
 
 
 # ----------------------------
@@ -35,6 +37,15 @@ def decide(policy_cfg, *, server: str, tool: str, env: str) -> Decision:
             matched = f"server={m.server} tool={m.tool} env={m.env}"
             return Decision(decision=p.effect, policy_id=p.id, reason=p.reason, matched=matched)
     return Decision(decision="deny", policy_id=None, reason="No policy matched", matched="none")
+
+
+def _get_policy_by_id(policy_cfg, policy_id: Optional[str]):
+    if not policy_id:
+        return None
+    for p in policy_cfg.policies:
+        if p.id == policy_id:
+            return p
+    return None
 
 
 # ----------------------------
@@ -64,15 +75,29 @@ async def db_insert_request(
     actor: Optional[str],
     env: str,
     status: str,
+    risk_score: Optional[int] = None,
+    risk_mode: Optional[str] = None,
 ) -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.execute(
             """
             INSERT INTO requests (
-              id, created_at, server, tool, arguments_json, arguments_hash, actor, env, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              id, created_at, server, tool, arguments_json, arguments_hash, actor, env, status, risk_score, risk_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (request_id, _now_iso(), server, tool, arguments_json, arguments_hash, actor, env, status),
+            (
+                request_id,
+                _now_iso(),
+                server,
+                tool,
+                arguments_json,
+                arguments_hash,
+                actor,
+                env,
+                status,
+                risk_score,
+                risk_mode,
+            ),
         )
         await db.commit()
 
@@ -80,6 +105,21 @@ async def db_insert_request(
 async def db_update_request_status(db_path: str, *, request_id: str, status: str) -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.execute("UPDATE requests SET status = ? WHERE id = ?", (status, request_id))
+        await db.commit()
+
+
+async def db_update_request_risk(
+    db_path: str,
+    *,
+    request_id: str,
+    risk_score: Optional[int],
+    risk_mode: Optional[str],
+) -> None:
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(
+            "UPDATE requests SET risk_score = ?, risk_mode = ? WHERE id = ?",
+            (risk_score, risk_mode, request_id),
+        )
         await db.commit()
 
 
@@ -126,13 +166,14 @@ async def db_insert_event(
 
 
 # ----------------------------
-# Interceptor: log → decide → enforce → forward
+# Interceptor: log → risk → decide → enforce → forward
 # ----------------------------
 
 class CtrlPolicyInterceptor:
-    def __init__(self, *, db_path: str, policy_cfg, default_env: str = "dev"):
+    def __init__(self, *, db_path: str, policy_cfg, risk_engine: RiskEngine, default_env: str = "dev"):
         self.db_path = db_path
         self.policy_cfg = policy_cfg
+        self.risk_engine = risk_engine
         self.default_env = default_env
 
     async def __call__(
@@ -144,11 +185,13 @@ class CtrlPolicyInterceptor:
         tool = getattr(request, "name", None) or "unknown"
         args = getattr(request, "args", None) or {}
 
+        # env
         env = self.default_env
         headers = getattr(request, "headers", None) or {}
         if isinstance(headers, dict) and headers.get("x-ctrl-env"):
             env = str(headers["x-ctrl-env"])
 
+        # actor (best-effort)
         actor = None
         runtime = getattr(request, "runtime", None)
         if runtime is not None:
@@ -160,7 +203,17 @@ class CtrlPolicyInterceptor:
         args_json = _stable_json(args)
         args_hash = _sha256(args_json)
 
-        # Persist intent first (durable)
+        # Risk first (so we can persist it on the request row)
+        intent = {"server": server, "tool": tool, "env": env, "args": args, "actor": actor}
+        risk_res = self.risk_engine.score(intent)
+        risk = {
+            "mode": risk_res.mode,
+            "score": int(risk_res.score),
+            "reasons": list(risk_res.reasons),
+            "rules": list(risk_res.matched_rules),
+        }
+
+        # Persist intent with risk fields
         await db_insert_request(
             self.db_path,
             request_id=request_id,
@@ -171,7 +224,10 @@ class CtrlPolicyInterceptor:
             actor=actor,
             env=env,
             status="proposed",
+            risk_score=risk["score"],
+            risk_mode=risk["mode"],
         )
+
         await db_insert_event(
             self.db_path,
             event_id=str(uuid.uuid4()),
@@ -180,7 +236,15 @@ class CtrlPolicyInterceptor:
             data={"server": server, "tool": tool, "env": env, "actor": actor},
         )
 
-        # Decide
+        await db_insert_event(
+            self.db_path,
+            event_id=str(uuid.uuid4()),
+            request_id=request_id,
+            type_="risk.scored",
+            data=risk,
+        )
+
+        # Policy decide
         d = decide(self.policy_cfg, server=server, tool=tool, env=env)
         await db_insert_decision(
             self.db_path,
@@ -199,6 +263,23 @@ class CtrlPolicyInterceptor:
             data={"decision": d.decision, "policy_id": d.policy_id, "reason": d.reason, "matched": d.matched},
         )
 
+        # Approval gating via require_approval_if (uses risk.score / risk.mode)
+        matched_policy = _get_policy_by_id(self.policy_cfg, d.policy_id)
+        if matched_policy and requires_approval(getattr(matched_policy, "require_approval_if", None), risk=risk):
+            d = Decision(
+                decision="pending",
+                policy_id=d.policy_id,
+                reason=f"Approval required ({getattr(matched_policy, 'require_approval_if', 'risk-gated')})",
+                matched=d.matched,
+            )
+            await db_insert_event(
+                self.db_path,
+                event_id=str(uuid.uuid4()),
+                request_id=request_id,
+                type_="decision.overridden",
+                data={"to": "pending", "because": "require_approval_if", "risk": risk},
+            )
+
         # Enforce
         if d.decision == "deny":
             await db_update_request_status(self.db_path, request_id=request_id, status="denied")
@@ -207,19 +288,18 @@ class CtrlPolicyInterceptor:
                 event_id=str(uuid.uuid4()),
                 request_id=request_id,
                 type_="request.denied",
-                data={"reason": d.reason},
+                data={"reason": d.reason, "risk": risk},
             )
             raise PermissionError(f"ctrl denied tool call: {server}.{tool} — {d.reason}")
 
         if d.decision == "pending":
-            # Day 4: approval flow. For Day 2, stop here.
             await db_update_request_status(self.db_path, request_id=request_id, status="pending")
             await db_insert_event(
                 self.db_path,
                 event_id=str(uuid.uuid4()),
                 request_id=request_id,
                 type_="request.pending",
-                data={"reason": d.reason},
+                data={"reason": d.reason, "risk": risk},
             )
             raise PermissionError(f"ctrl requires approval (pending): {server}.{tool} — {d.reason}")
 
@@ -230,7 +310,7 @@ class CtrlPolicyInterceptor:
             event_id=str(uuid.uuid4()),
             request_id=request_id,
             type_="proxy.forwarding",
-            data={"server": server, "tool": tool},
+            data={"server": server, "tool": tool, "risk": risk},
         )
 
         try:
@@ -264,8 +344,8 @@ class CtrlMCP:
     """
     LangChain-first entry point.
 
-    - Loads servers.yaml + policy.yaml
-    - Ensures DB is initialized (migrations)
+    - Loads servers.yaml + policy.yaml (+ risk.yaml)
+    - Ensures DB is initialized (tables + columns)
     - Builds MultiServerMCPClient(connections, tool_interceptors=[...])
     - Exposes get_tools() returning normal LangChain tools
     """
@@ -275,20 +355,27 @@ class CtrlMCP:
         *,
         servers: str = "configs/servers.yaml",
         policy: str = "configs/policy.yaml",
+        risk: str = "configs/risk.yaml",
         db_path: str = "ctrl.db",
         default_env: str = "dev",
         tool_name_prefix: bool = False,
     ):
         self._servers_path = servers
         self._policy_path = policy
+        self._risk_path = risk
         self._db_path = db_path
         self._default_env = default_env
         self._tool_name_prefix = tool_name_prefix
 
-        # Important: make sure DB exists even if user didn't run validate-config
         ensure_db(db_path=self._db_path)
 
-        self._servers_cfg, self._policy_cfg = load_and_validate(servers_path=self._servers_path, policy_path=self._policy_path)
+        self._servers_cfg, self._policy_cfg = load_and_validate(
+            servers_path=self._servers_path,
+            policy_path=self._policy_path,
+        )
+
+        self._risk_cfg = load_risk_config(risk_path=self._risk_path)
+        self._risk_engine = RiskEngine(self._risk_cfg)
 
         connections: dict[str, dict[str, Any]] = {}
         for s in self._servers_cfg.servers:
@@ -297,6 +384,7 @@ class CtrlMCP:
         interceptor = CtrlPolicyInterceptor(
             db_path=self._db_path,
             policy_cfg=self._policy_cfg,
+            risk_engine=self._risk_engine,
             default_env=self._default_env,
         )
 
@@ -310,11 +398,10 @@ class CtrlMCP:
         return await self._client.get_tools()
 
     async def aclose(self):
-        await self._client.__aexit__(None, None, None)
+        return None
 
     async def __aenter__(self):
-        await self._client.__aenter__()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        return await self._client.__aexit__(exc_type, exc, tb)
+        return False

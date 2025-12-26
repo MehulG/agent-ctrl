@@ -9,14 +9,20 @@ def ensure_db(db_path: str) -> None:
         cur.execute("CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY)")
         conn.commit()
 
-        migration_id = "001_init"
-        cur.execute("SELECT 1 FROM _migrations WHERE id = ?", (migration_id,))
-        if cur.fetchone():
-            return
+        cur.execute("SELECT id FROM _migrations")
+        applied = {row[0] for row in cur.fetchall()}
 
-        sql = Path("migrations/001_init.sql").read_text(encoding="utf-8")
-        conn.executescript(sql)
-        cur.execute("INSERT INTO _migrations (id) VALUES (?)", (migration_id,))
-        conn.commit()
+        migrations = [
+            ("001_init", "migrations/001_init.sql"),
+            ("002_add_risk_and_approval", "migrations/002_add_risk_and_approval.sql"),
+        ]
+
+        for migration_id, path in migrations:
+            if migration_id in applied:
+                continue
+            sql = Path(path).read_text(encoding="utf-8")
+            conn.executescript(sql)
+            cur.execute("INSERT INTO _migrations (id) VALUES (?)", (migration_id,))
+            conn.commit()
     finally:
         conn.close()
