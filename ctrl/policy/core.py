@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 from typing import Any, Optional
 
+from ctrl.policy.conditions import denies_action
+
 
 @dataclass(frozen=True)
 class PolicyMatchResult:
@@ -14,15 +16,25 @@ class PolicyMatchResult:
     index: int  # policy order
 
 
-def decide_explain(policy_cfg, *, server: str, tool: str, env: str) -> PolicyMatchResult:
+def decide_explain(policy_cfg, *, server: str, tool: str, env: str, risk: Optional[dict] = None) -> PolicyMatchResult:
     """
     First-match-wins wildcard matching using fnmatch (* patterns).
     policy_cfg is ctrl.config.schema.PolicyConfig (pydantic).
     """
+    risk_ctx = risk or {"mode": "safe", "score": 0}
     for i, p in enumerate(policy_cfg.policies):
         m = p.match
         if fnmatch(server, m.server) and fnmatch(tool, m.tool) and fnmatch(env, m.env):
             matched = f"server={m.server} tool={m.tool} env={m.env}"
+            if denies_action(getattr(p, "deny", None), risk=risk_ctx):
+                reason = p.reason or f"Denied by condition ({p.deny})"
+                return PolicyMatchResult(
+                    decision="deny",
+                    policy_id=p.id,
+                    reason=reason,
+                    matched=matched,
+                    index=i,
+                )
             return PolicyMatchResult(
                 decision=p.effect,
                 policy_id=p.id,
@@ -114,7 +126,8 @@ def run_policy_tests(policy_cfg, tests_cfg: dict[str, Any]) -> tuple[int, list[s
         tool = inp.get("tool", "")
         env = inp.get("env", "")
 
-        got = decide_explain(policy_cfg, server=server, tool=tool, env=env).decision
+        risk = t.get("risk")
+        got = decide_explain(policy_cfg, server=server, tool=tool, env=env, risk=risk).decision
         ok = (got == exp)
 
         if ok:

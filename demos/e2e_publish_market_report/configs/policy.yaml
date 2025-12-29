@@ -1,0 +1,13 @@
+policies:
+  # Allow everything else, but deny danger and gate review
+  - id: allow-with-approval
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Allowed but gated by risk"
+    deny: "risk.mode == 'danger'"
+    require_approval_if: "risk.mode in ['review']"
+
+  - id: allow-default
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Default allow"

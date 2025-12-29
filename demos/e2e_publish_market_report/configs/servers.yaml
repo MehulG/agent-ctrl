@@ -1,0 +1,8 @@
+servers:
+  - name: coingecko
+    transport: http
+    base_url: https://mcp.api.coingecko.com/mcp
+
+  - name: edgeone
+    transport: http
+    base_url: https://mcp-on-edge.edgeone.site/mcp-server

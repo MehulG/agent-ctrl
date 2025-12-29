@@ -13,6 +13,30 @@ type RequestItem = {
   risk_score: number | null;
 };
 
+type StatusRequest = {
+  id: string;
+  created_at: string;
+  server: string;
+  tool: string;
+  env: string;
+  status: string;
+  risk_score: number | null;
+  arguments: Record<string, unknown>;
+  result_preview?: string | null;
+};
+
+type StatusDecision = {
+  decided_at: string;
+  decision: string;
+  policy_id: string | null;
+  reason: string | null;
+};
+
+type StatusResponse = {
+  request: StatusRequest;
+  decision: StatusDecision | null;
+};
+
 type Notice = {
   type: "error" | "success" | "info";
   message: string;
@@ -109,6 +133,11 @@ export default function RequestsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [limit, setLimit] = useState("200");
   const [items, setItems] = useState<RequestItem[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [detailsById, setDetailsById] = useState<
+    Record<string, StatusResponse>
+  >({});
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const hasLoadedRef = useRef(false);
@@ -158,6 +187,28 @@ export default function RequestsPage() {
       setLoading(false);
     }
   }, [baseParams, limit, makeUrl, statusFilter]);
+
+  const loadDetails = useCallback(
+    async (requestId: string) => {
+      if (detailsById[requestId]) {
+        return;
+      }
+      setLoadingId(requestId);
+      setNotice(null);
+      try {
+        const url = makeUrl(`status/${requestId}`, baseParams);
+        const data = await parseResponse<StatusResponse>(await fetch(url));
+        setDetailsById((prev) => ({ ...prev, [requestId]: data }));
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to load request.";
+        setNotice({ type: "error", message });
+      } finally {
+        setLoadingId((current) => (current === requestId ? null : current));
+      }
+    },
+    [baseParams, detailsById, makeUrl]
+  );
 
   useEffect(() => {
     if (hasLoadedRef.current) {
@@ -306,35 +357,164 @@ export default function RequestsPage() {
                 {loading ? "Loading requests..." : "No requests found."}
               </div>
             ) : (
-              items.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-[var(--stroke)] bg-white/80 p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="mono text-xs text-[var(--muted)]">
-                        {item.id}
-                      </p>
-                      <p className="text-lg font-semibold text-[var(--ink)]">
-                        {item.server} / {item.tool}
-                      </p>
+              items.map((item) => {
+                const isExpanded = expandedId === item.id;
+                const details = detailsById[item.id];
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-2xl border border-[var(--stroke)] bg-white/80 p-4"
+                  >
+                    <div
+                      className="cursor-pointer"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        const next = isExpanded ? null : item.id;
+                        setExpandedId(next);
+                        if (!isExpanded) {
+                          loadDetails(item.id);
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          const next = isExpanded ? null : item.id;
+                          setExpandedId(next);
+                          if (!isExpanded) {
+                            loadDetails(item.id);
+                          }
+                        }
+                      }}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="mono text-xs text-[var(--muted)]">
+                            {item.id}
+                          </p>
+                          <p className="text-lg font-semibold text-[var(--ink)]">
+                            {item.server} / {item.tool}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`chip ${statusTone(item.status)}`}>
+                            {item.status}
+                          </span>
+                          <span className={`chip ${riskTone(item.risk_score)}`}>
+                            risk {formatRisk(item.risk_score)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-[var(--muted)]">
+                        <span>env: {item.env || "-"}</span>
+                        <span>created: {formatDate(item.created_at)}</span>
+                      </div>
+                      <div className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
+                        {isExpanded ? "Hide details" : "Show details"}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`chip ${statusTone(item.status)}`}>
-                        {item.status}
-                      </span>
-                      <span className={`chip ${riskTone(item.risk_score)}`}>
-                        risk {formatRisk(item.risk_score)}
-                      </span>
-                    </div>
+
+                    {isExpanded && (
+                      <div className="mt-4 rounded-2xl border border-[var(--stroke)] bg-white/90 p-4">
+                        {loadingId === item.id && !details ? (
+                          <div className="text-sm text-[var(--muted)]">
+                            Loading details...
+                          </div>
+                        ) : details ? (
+                          <div className="grid gap-4">
+                            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                              <div>
+                                <h3 className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
+                                  Arguments
+                                </h3>
+                                <pre className="mono mt-2 max-h-52 overflow-auto rounded-2xl border border-[var(--stroke)] bg-white p-3 text-xs text-[var(--ink)]">
+                                  {JSON.stringify(
+                                    details.request.arguments ?? {},
+                                    null,
+                                    2
+                                  )}
+                                </pre>
+                              </div>
+                              <div className="flex flex-col gap-3 text-sm text-[var(--muted)]">
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
+                                    Status
+                                  </p>
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={`chip ${statusTone(
+                                        details.request.status
+                                      )}`}
+                                    >
+                                      {details.request.status}
+                                    </span>
+                                    <span
+                                      className={`chip ${riskTone(
+                                        details.request.risk_score
+                                      )}`}
+                                    >
+                                      risk{" "}
+                                      {formatRisk(details.request.risk_score)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
+                                    Decision
+                                  </p>
+                                  {details.decision ? (
+                                    <div className="mt-2 rounded-2xl border border-[var(--stroke)] bg-white p-3 text-sm text-[var(--ink)]">
+                                      <div className="flex flex-wrap gap-4">
+                                        <span className="font-semibold">
+                                          {details.decision.decision}
+                                        </span>
+                                        <span className="text-[var(--muted)]">
+                                          {formatDate(
+                                            details.decision.decided_at
+                                          )}
+                                        </span>
+                                      </div>
+                                      <p className="mt-2 text-[var(--muted)]">
+                                        Policy:{" "}
+                                        {details.decision.policy_id || "-"}
+                                      </p>
+                                      <p className="mt-1 text-[var(--muted)]">
+                                        Reason: {details.decision.reason || "-"}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="mt-2 rounded-2xl border border-dashed border-[var(--stroke)] bg-white p-3 text-sm text-[var(--muted)]">
+                                      No decision recorded yet.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div>
+                              <h3 className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
+                                Tool result
+                              </h3>
+                              {details.request.result_preview ? (
+                                <pre className="mono mt-2 max-h-52 overflow-auto rounded-2xl border border-[var(--stroke)] bg-white p-3 text-xs text-[var(--ink)]">
+                                  {details.request.result_preview}
+                                </pre>
+                              ) : (
+                                <div className="mt-2 rounded-2xl border border-dashed border-[var(--stroke)] bg-white p-3 text-sm text-[var(--muted)]">
+                                  No result recorded yet.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-[var(--muted)]">
+                            Details unavailable.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-[var(--muted)]">
-                    <span>env: {item.env || "-"}</span>
-                    <span>created: {formatDate(item.created_at)}</span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>
