@@ -11,7 +11,7 @@ async def main():
     mcp = CtrlMCP(
         servers="configs/servers.yaml", 
         policy="configs/policy.yaml", 
-        risk="configs/risk.yaml"
+        risk="configs/risk.yaml",
         db_path="ctrl.db"
         )
 

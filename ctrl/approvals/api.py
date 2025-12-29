@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 import aiosqlite
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -13,6 +14,13 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 from ctrl.config.loader import load_and_validate
 
 app = FastAPI(title="ctrl approvals")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class ApproveBody(BaseModel):
     approved_by: Optional[str] = "human"
@@ -74,6 +82,47 @@ async def pending(db_path: str = "ctrl.db"):
             LIMIT 200
             """,
         )
+        return [
+            {
+                "id": r[0],
+                "created_at": r[1],
+                "server": r[2],
+                "tool": r[3],
+                "env": r[4],
+                "status": r[5],
+                "risk_score": r[6],
+            }
+            for r in rows
+        ]
+
+@app.get("/requests")
+async def requests(db_path: str = "ctrl.db", status: Optional[str] = None, limit: int = 200):
+    status_filter = None if status is None else status.strip().lower()
+    safe_limit = max(1, min(limit, 500))
+    async with aiosqlite.connect(db_path) as db:
+        if status_filter:
+            rows = await _fetch_all(
+                db,
+                """
+                SELECT id, created_at, server, tool, env, status, risk_score
+                FROM requests
+                WHERE status = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (status_filter, safe_limit),
+            )
+        else:
+            rows = await _fetch_all(
+                db,
+                """
+                SELECT id, created_at, server, tool, env, status, risk_score
+                FROM requests
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            )
         return [
             {
                 "id": r[0],
