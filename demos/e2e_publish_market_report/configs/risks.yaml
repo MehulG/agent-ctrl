@@ -1,0 +1,36 @@
+risk:
+  mode: modes
+
+  modes:
+    safe:   { score: 10 }
+    review: { score: 50 }
+    danger: { score: 90 }
+
+  rules:
+    # CoinGecko is read-only data → safe
+    - name: coingecko-safe
+      when: { server: "coingecko", tool: "*" }
+      set_mode: safe
+      reason: "Read-only market data"
+
+    # Any EdgeOne publish/deploy → review by default
+    - name: edgeone-publish-review
+      when: { server: "edgeone", tool: "*" }
+      set_mode: review
+      reason: "Publishes a public webpage"
+
+    # If HTML contains <script> → danger (prevents shipping malware)
+    - name: edgeone-script-danger
+      when:
+        server: "edgeone"
+        tool: "*"
+        args:
+          html:
+            contains: "<script"
+      set_mode: danger
+      reason: "Page contains script tag"
+
+  set_mode_by_score:
+    danger: "score >= 70"
+    review: "score >= 40"
+    safe:   "score < 40"

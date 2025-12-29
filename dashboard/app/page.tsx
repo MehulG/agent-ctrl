@@ -22,6 +22,7 @@ type StatusRequest = {
   status: string;
   risk_score: number | null;
   arguments: Record<string, unknown>;
+  result_preview?: string | null;
 };
 
 type StatusDecision = {
@@ -605,6 +606,21 @@ export default function ConsolePage() {
                         2
                       )}
                     </pre>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
+                      Tool result
+                    </h3>
+                    {statusData.request.result_preview ? (
+                      <pre className="mono mt-3 max-h-64 overflow-auto rounded-2xl border border-[var(--stroke)] bg-white/80 p-4 text-xs text-[var(--ink)]">
+                        {statusData.request.result_preview}
+                      </pre>
+                    ) : (
+                      <div className="mt-3 rounded-2xl border border-dashed border-[var(--stroke)] bg-white/60 p-4 text-sm text-[var(--muted)]">
+                        No result recorded yet.
+                      </div>
+                    )}
                   </div>
 
                   <div>

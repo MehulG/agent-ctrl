@@ -159,6 +159,34 @@ async def status(request_id: str, db_path: str = "ctrl.db"):
             (request_id,),
         )
 
+        result_preview = None
+        events = await _fetch_all(
+            db,
+            """
+            SELECT data_json
+            FROM events
+            WHERE request_id = ?
+            ORDER BY created_at DESC
+            LIMIT 25
+            """,
+            (request_id,),
+        )
+        for row in events:
+            if not row or not row[0]:
+                continue
+            try:
+                payload = json.loads(row[0])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict) and "result_preview" in payload:
+                result_preview = payload.get("result_preview")
+                break
+        if result_preview is not None and not isinstance(result_preview, str):
+            try:
+                result_preview = json.dumps(result_preview, ensure_ascii=False)
+            except TypeError:
+                result_preview = str(result_preview)
+
         return {
             "request": {
                 "id": r[0],
@@ -169,6 +197,7 @@ async def status(request_id: str, db_path: str = "ctrl.db"):
                 "status": r[5],
                 "risk_score": r[6],
                 "arguments": json.loads(r[7]) if r[7] else {},
+                "result_preview": result_preview,
             },
             "decision": None if not d else {
                 "decided_at": d[0],

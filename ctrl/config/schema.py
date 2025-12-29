@@ -30,6 +30,7 @@ class Policy(BaseModel):
     match: PolicyMatch
     effect: Literal["allow", "deny", "pending"]
     reason: str = ""
+    deny: Optional[str] = None
     require_approval_if: Optional[str] = None
 
 class PolicyConfig(BaseModel):

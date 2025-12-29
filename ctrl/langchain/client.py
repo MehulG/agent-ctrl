@@ -14,7 +14,7 @@ from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 
 from ctrl.config.loader import load_and_validate, load_risk_config
 from ctrl.db.migrate import ensure_db
-from ctrl.policy.conditions import requires_approval
+from ctrl.policy.conditions import denies_action, requires_approval
 from ctrl.risk.engine import RiskEngine
 
 
@@ -30,11 +30,15 @@ class Decision:
     matched: str  # short string for debugging
 
 
-def decide(policy_cfg, *, server: str, tool: str, env: str) -> Decision:
+def decide(policy_cfg, *, server: str, tool: str, env: str, risk: Optional[dict] = None) -> Decision:
+    risk_ctx = risk or {"mode": "safe", "score": 0}
     for p in policy_cfg.policies:
         m = p.match
         if fnmatch(server, m.server) and fnmatch(tool, m.tool) and fnmatch(env, m.env):
             matched = f"server={m.server} tool={m.tool} env={m.env}"
+            if denies_action(getattr(p, "deny", None), risk=risk_ctx):
+                reason = p.reason or f"Denied by condition ({p.deny})"
+                return Decision(decision="deny", policy_id=p.id, reason=reason, matched=matched)
             return Decision(decision=p.effect, policy_id=p.id, reason=p.reason, matched=matched)
     return Decision(decision="deny", policy_id=None, reason="No policy matched", matched="none")
 
@@ -62,6 +66,14 @@ def _stable_json(obj: Any) -> str:
 
 def _sha256(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+def _safe_preview(value: Any, limit: int = 500) -> str:
+    try:
+        text = str(value)
+    except Exception:
+        text = repr(value)
+    return text[:limit]
 
 
 async def db_insert_request(
@@ -245,7 +257,7 @@ class CtrlPolicyInterceptor:
         )
 
         # Policy decide
-        d = decide(self.policy_cfg, server=server, tool=tool, env=env)
+        d = decide(self.policy_cfg, server=server, tool=tool, env=env, risk=risk)
         await db_insert_decision(
             self.db_path,
             decision_id=str(uuid.uuid4()),
@@ -322,6 +334,13 @@ class CtrlPolicyInterceptor:
                 request_id=request_id,
                 type_="proxy.executed",
                 data={"ok": True},
+            )
+            await db_insert_event(
+                self.db_path,
+                event_id=str(uuid.uuid4()),
+                request_id=request_id,
+                type_="tool.result",
+                data={"result_preview": _safe_preview(result)},
             )
             return result
         except Exception as e:
