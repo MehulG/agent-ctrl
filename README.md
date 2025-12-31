@@ -1,8 +1,41 @@
 # ctrl
 
-Execution control plane for AI agents with MCP tool interception, policy enforcement, and an auditable ledger. ctrl sits between a LangChain agent and its MCP servers, evaluates intent against policies + risk, and records every decision in SQLite.
+Execution control plane for AI agents with MCP tool interception, policy enforcement, and an auditable ledger.
 
-Status: early v0; interfaces may change quickly.
+One-liner: drop-in `CtrlMCP` wrapper for LangChain that risk-scores every MCP tool call, applies policy (allow/deny/pending), and records the full audit trail in SQLite.
+
+Status: early v0; APIs may change quickly—treat the demos as the source of truth.
+
+---
+
+## 5-minute demo (publish a market report)
+Run the end-to-end demo that fetches crypto data and publishes a static page through EdgeOne. Requires Python 3.11+, Poetry, and `GOOGLE_API_KEY` for the Gemini model.
+
+```bash
+git clone https://github.com/MehulG/agent-ctrl
+cd ctrl
+poetry install
+
+# validate configs + init SQLite ledger
+poetry run ctrl validate-config \
+  --servers demos/e2e_publish_market_report/configs/servers.yaml \
+  --policy demos/e2e_publish_market_report/configs/policy.yaml \
+  --db ctrl.db
+
+# run the LangChain agent (prints a pending ID or a URL + insights)
+GOOGLE_API_KEY=<key> ./demos/e2e_publish_market_report/run.sh
+```
+
+The agent calls CoinGecko first, generates HTML, and attempts to publish via EdgeOne. If policy returns `pending`, you will see a request ID (the agent exits after printing it); start the approvals API, approve the request so the approvals service executes the publish, then fetch the result via the dashboard or `GET /status/<id>`. More context: `docs/quickstart.md`.
+
+If you see a pending ID:
+Run approvals service from the repo root so it shares the same configs and `ctrl.db`:
+```bash
+poetry run ctrl approvals-serve --host 127.0.0.1 --port 8788
+curl -X POST http://127.0.0.1:8788/approve/<id>
+curl http://127.0.0.1:8788/status/<id>
+# or open the dashboard UI (start from dashboard/, default http://localhost:5173)
+```
 
 ---
 
@@ -15,6 +48,24 @@ Status: early v0; interfaces may change quickly.
 
 ---
 
+## Architecture
+```
+LangChain agent
+   |
+   v
+CtrlMCP wrapper
+   |  log intent -> score risk -> apply policy
+   v
+SQLite ledger (requests/decisions/events)
+   |
+   +--> Approvals API + dashboard (for pending)
+   |
+   v
+MCP servers (CoinGecko, EdgeOne, ...)
+```
+
+---
+
 ## Requirements
 - Python 3.11+
 - Poetry
@@ -24,7 +75,7 @@ Status: early v0; interfaces may change quickly.
 
 ## Install
 ```bash
-git clone <repo-url>
+git clone https://github.com/MehulG/agent-ctrl
 cd ctrl
 poetry install
 
@@ -78,6 +129,7 @@ risk:
 2) Validate config and initialize the database.
 ```bash
 poetry run ctrl validate-config --servers configs/servers.yaml --policy configs/policy.yaml --db ctrl.db
+# risk.yaml is loaded at runtime (no CLI validator yet)
 ```
 
 3) Wrap your LangChain MCP client.
@@ -96,7 +148,8 @@ mcp = CtrlMCP(
 tools = await mcp.get_tools()   # returns LangChain tools with interception attached
 ```
 
-Tool calls now flow through: log intent -> score risk -> decide policy -> enforce -> forward to MCP server. Deny/pending raise `PermissionError` before execution.
+Tool calls now flow through: log intent -> score risk -> decide policy -> enforce -> forward to MCP server. `deny` raises `PermissionError`; `pending` is an expected outcome that either returns a pending payload (when `return_on_pending=True`) or raises `PermissionError` with the request ID. No tool runs until approval is issued via the approvals service.
+Recommendation: use `allow + require_approval_if` for conditional gating and reserve `effect: pending` for always-gated tools.
 
 ---
 
@@ -127,7 +180,7 @@ Use `ctrl policy explain` to see which policy would match a given server/tool/en
 ---
 
 ## Approvals (pending -> human)
-- Policies that resolve to `pending` are blocked until approved.
+- Requests that resolve to `pending` are blocked until approved.
 - Start the lightweight API:
 ```bash
 poetry run ctrl approvals-serve --host 127.0.0.1 --port 8788
@@ -137,6 +190,7 @@ poetry run ctrl approvals-serve --host 127.0.0.1 --port 8788
   - `GET /status/{request_id}` — request + last decision
   - `POST /approve/{request_id}` — mark approved and execute the tool via MCP
   - `POST /deny/{request_id}` — mark denied
+- Approvals service replays the tool call on approval; fetch the result via `GET /status/{request_id}` or the dashboard.
 - Uses the same `ctrl.db` ledger; events capture approval decisions and execution results.
 
 ---
