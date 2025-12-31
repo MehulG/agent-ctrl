@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable, Optional
 import aiosqlite
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest
+from langchain_core.messages import ToolMessage
 
 from ctrl.config.loader import load_and_validate, load_risk_config
 from ctrl.db.migrate import ensure_db
@@ -182,11 +183,20 @@ async def db_insert_event(
 # ----------------------------
 
 class CtrlPolicyInterceptor:
-    def __init__(self, *, db_path: str, policy_cfg, risk_engine: RiskEngine, default_env: str = "dev"):
+    def __init__(
+        self,
+        *,
+        db_path: str,
+        policy_cfg,
+        risk_engine: RiskEngine,
+        default_env: str = "dev",
+        return_on_pending: bool = False,
+    ):
         self.db_path = db_path
         self.policy_cfg = policy_cfg
         self.risk_engine = risk_engine
         self.default_env = default_env
+        self.return_on_pending = return_on_pending
 
     async def __call__(
         self,
@@ -313,6 +323,20 @@ class CtrlPolicyInterceptor:
                 type_="request.pending",
                 data={"reason": d.reason, "risk": risk},
             )
+            if self.return_on_pending:
+                payload = {
+                    "status": "pending",
+                    "request_id": request_id,
+                    "reason": d.reason,
+                    "server": server,
+                    "tool": tool,
+                }
+                # ToolMessage so LangChain/LangGraph see a tool result instead of an exception
+                return ToolMessage(
+                    tool_call_id=request_id,
+                    name=f"{server}.{tool}",
+                    content=json.dumps(payload),
+                )
             raise PermissionError(f"ctrl requires approval (pending): {server}.{tool} — {d.reason}")
 
         # allow → forward
@@ -378,6 +402,7 @@ class CtrlMCP:
         db_path: str = "ctrl.db",
         default_env: str = "dev",
         tool_name_prefix: bool = False,
+        return_on_pending: bool = False,
     ):
         self._servers_path = servers
         self._policy_path = policy
@@ -405,6 +430,7 @@ class CtrlMCP:
             policy_cfg=self._policy_cfg,
             risk_engine=self._risk_engine,
             default_env=self._default_env,
+            return_on_pending=return_on_pending,
         )
 
         self._client = MultiServerMCPClient(

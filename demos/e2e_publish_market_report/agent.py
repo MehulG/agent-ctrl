@@ -1,4 +1,5 @@
 import asyncio
+import json
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import create_agent
 from ctrl.langchain.client import CtrlMCP
@@ -25,6 +26,9 @@ IMPORTANT RULES:
 - Do NOT stop early.
 - If you cannot find an edgeone tool to deploy HTML, reply exactly with:
   EDGEONE_TOOL_NOT_FOUND
+- When using coingecko tools, do NOT pass a jq filter unless required.
+- If a coingecko tool requires a jq filter, use this exact filter:
+  .[] | {name: .name, symbol: .symbol, current_price: .current_price, price_change_percentage_24h: .price_change_percentage_24h}
 
 TASK (follow exactly):
 
@@ -62,6 +66,7 @@ async def main():
         policy=str(BASE / "configs/policy.yaml"),
         risk=str(BASE / "configs/risks.yaml"),
         db_path="ctrl.db",
+        return_on_pending=True,
 )
 
     tools = await mcp.get_tools()
@@ -69,8 +74,30 @@ async def main():
     agent = create_agent(llm, tools)
 
     out = await agent.ainvoke({"messages": [("user", PROMPT)]})
+    pending_request_id = _find_pending_request_id(out.get("messages", []))
+    if pending_request_id:
+        print(f"Waiting for approval: {pending_request_id}")
+        return
     last = out["messages"][-1]
     print(last.content)
+
+
+def _find_pending_request_id(messages) -> str | None:
+    for msg in messages:
+        content = getattr(msg, "content", None)
+        if isinstance(content, dict):
+            if content.get("status") == "pending" and content.get("request_id"):
+                return str(content["request_id"])
+            continue
+        if not isinstance(content, str):
+            continue
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and parsed.get("status") == "pending" and parsed.get("request_id"):
+            return str(parsed["request_id"])
+    return None
 
 if __name__ == "__main__":
     asyncio.run(main())
