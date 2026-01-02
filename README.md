@@ -37,6 +37,19 @@ curl http://127.0.0.1:8788/status/<id>
 # or open the dashboard UI (start from dashboard/, default http://localhost:5173)
 ```
 
+### Docker (agent + approvals + dashboard)
+Prefer containers? Use the bundled compose in `demos/e2e_publish_market_report/`:
+1) Copy `.env.example` to `.env` in that folder and set values (at minimum `GOOGLE_API_KEY`; set `NEXT_PUBLIC_CTRL_API_BASE` to a host/IP your browser can reach).
+2) From repo root, start long-running services:
+```bash
+docker compose --env-file demos/e2e_publish_market_report/.env -f demos/e2e_publish_market_report/docker-compose.yml up -d approvals dashboard --build
+```
+3) Run the agent as a one-off (re-run anytime):
+```bash
+docker compose --env-file demos/e2e_publish_market_report/.env -f demos/e2e_publish_market_report/docker-compose.yml run --rm agent
+```
+Ports by default: approvals API `http://localhost:8788`, dashboard `http://localhost:3000`. The shared ledger lives in the `ctrl-data` volume at `/data/ctrl.db`.
+
 ---
 
 ## What it does

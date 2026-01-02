@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -17,6 +18,9 @@ from ctrl.config.loader import load_and_validate, load_risk_config
 from ctrl.db.migrate import ensure_db
 from ctrl.policy.conditions import denies_action, requires_approval
 from ctrl.risk.engine import RiskEngine
+
+# Suppress noisy session termination warnings when MCP servers return 404 on DELETE /mcp.
+logging.getLogger("mcp.client.streamable_http").setLevel(logging.ERROR)
 
 
 # ----------------------------

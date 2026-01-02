@@ -42,11 +42,20 @@ type Notice = {
   message: string;
 };
 
-const defaultBaseUrl =
-  process.env.NEXT_PUBLIC_CTRL_API_BASE ?? "http://127.0.0.1:8788";
+const fallbackApiBase = (() => {
+  if (typeof window === "undefined") return "http://127.0.0.1:8788";
+  const { protocol, hostname } = window.location;
+  const host = hostname || "127.0.0.1";
+  return `${protocol}//${host}:8788`;
+})();
 
-const defaultDbPath = "ctrl.db";
-const defaultServersPath = "configs/servers.yaml";
+const defaultBaseUrl =
+  process.env.NEXT_PUBLIC_CTRL_API_BASE || fallbackApiBase;
+
+const defaultDbPath =
+  process.env.NEXT_PUBLIC_CTRL_DB_PATH ?? "/data/ctrl.db";
+const defaultServersPath =
+  process.env.NEXT_PUBLIC_CTRL_SERVERS_PATH ?? "configs/servers.yaml";
 
 const parseResponse = async <T,>(response: Response): Promise<T> => {
   const text = await response.text();

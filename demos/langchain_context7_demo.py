@@ -17,7 +17,7 @@ async def main():
 
     tools = await mcp.get_tools()
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
     agent = create_agent(llm, tools)
     out = await agent.ainvoke(
         {
