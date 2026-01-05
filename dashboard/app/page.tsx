@@ -53,7 +53,7 @@ const defaultBaseUrl =
   process.env.NEXT_PUBLIC_CTRL_API_BASE || fallbackApiBase;
 
 const defaultDbPath =
-  process.env.NEXT_PUBLIC_CTRL_DB_PATH ?? "/data/ctrl.db";
+  process.env.NEXT_PUBLIC_CTRL_DB_PATH ?? "ctrl.db";
 const defaultServersPath =
   process.env.NEXT_PUBLIC_CTRL_SERVERS_PATH ?? "configs/servers.yaml";
 

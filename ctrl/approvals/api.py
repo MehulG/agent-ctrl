@@ -62,7 +62,10 @@ def _connections_from_servers_yaml(servers_path: str | None = None) -> Dict[str,
     servers_cfg, _ = load_and_validate(servers_path=servers_file, policy_path=DEFAULT_POLICY_PATH)
     conns: Dict[str, Dict[str, Any]] = {}
     for s in servers_cfg.servers:
-        conns[s.name] = {"transport": s.transport, "url": s.base_url}
+        conn: Dict[str, Any] = {"transport": s.transport, "url": s.base_url}
+        if s.transport == "http":
+            conn["terminate_on_close"] = False
+        conns[s.name] = conn
     return conns
 
 async def _execute_tool(server: str, tool: str, args: Dict[str, Any], servers_path: str | None = None) -> Any:

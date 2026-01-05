@@ -427,7 +427,11 @@ class CtrlMCP:
 
         connections: dict[str, dict[str, Any]] = {}
         for s in self._servers_cfg.servers:
-            connections[s.name] = {"transport": s.transport, "url": s.base_url}
+            conn: dict[str, Any] = {"transport": s.transport, "url": s.base_url}
+            if s.transport == "http":
+                # Avoid noisy session termination DELETE calls on shutdown.
+                conn["terminate_on_close"] = False
+            connections[s.name] = conn
 
         interceptor = CtrlPolicyInterceptor(
             db_path=self._db_path,
