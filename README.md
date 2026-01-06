@@ -4,6 +4,8 @@
 **Execution control plane for AI agents.**
 
 Ctrl sits between *agent intent* and *real-world actions*.  
+Agents can *decide* what to do. Ctrl decides what’s *allowed to happen*.
+
 It intercepts tool calls, risk-scores them, enforces policy (allow / deny / approve),
 and executes only what’s authorized — with a full, auditable ledger.
 
@@ -63,7 +65,7 @@ GOOGLE_API_KEY=<key> ./demos/e2e_publish_market_report/run.sh
 ````
 
 If policy returns `pending`, the agent currently exits after printing a request ID.
-No tool executes until approval is issued.
+This is intentional: *nothing runs until approval is recorded*.
 
 Start the approvals API (same configs + shared `ctrl.db`):
 
