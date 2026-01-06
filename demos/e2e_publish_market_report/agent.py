@@ -1,12 +1,26 @@
 import asyncio
 import json
+import os
+import logging
+from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import create_agent
 from ctrl.langchain.client import CtrlMCP
 
-from pathlib import Path
-
 BASE = Path(__file__).parent
+DEFAULT_DB_PATH = os.environ.get("CTRL_DB_PATH", "ctrl.db")
+DEFAULT_SERVERS_PATH = os.environ.get(
+    "CTRL_SERVERS_PATH", str(BASE / "configs" / "servers.yaml")
+)
+DEFAULT_POLICY_PATH = os.environ.get(
+    "CTRL_POLICY_PATH", str(BASE / "configs" / "policy.yaml")
+)
+DEFAULT_RISK_PATH = os.environ.get(
+    "CTRL_RISK_PATH", str(BASE / "configs" / "risk.yaml")
+)
+
+# Silence noisy session termination warnings from MCP HTTP client.
+logging.getLogger("mcp.client.streamable_http").setLevel(logging.CRITICAL)
 
 
 PROMPT = """
@@ -62,12 +76,12 @@ Step 4 — Final response:
 async def main():
 
     mcp = CtrlMCP(
-        servers=str(BASE / "configs/servers.yaml"),
-        policy=str(BASE / "configs/policy.yaml"),
-        risk=str(BASE / "configs/risk.yaml"),
-        db_path="ctrl.db",
+        servers=DEFAULT_SERVERS_PATH,
+        policy=DEFAULT_POLICY_PATH,
+        risk=DEFAULT_RISK_PATH,
+        db_path=DEFAULT_DB_PATH,
         return_on_pending=True,
-)
+    )
 
     tools = await mcp.get_tools()
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0)

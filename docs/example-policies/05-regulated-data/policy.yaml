@@ -1,0 +1,29 @@
+policies:
+  - id: deny-danger
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Dangerous modes are blocked outright"
+    deny: "risk.mode == 'danger'"
+
+  - id: model-serve-approval
+    match: { server: "model-serve", tool: "*", env: "*" }
+    effect: allow
+    reason: "Large or prod model calls require approval when risk climbs"
+    require_approval_if: "risk.score >= 70"
+
+  - id: data-export-approval
+    match: { server: "data-export", tool: "*", env: "*" }
+    effect: allow
+    reason: "Data exports require approval when high risk"
+    require_approval_if: "risk.score >= 60"
+
+  - id: prod-deploy-approval
+    match: { server: "deploy", tool: "*", env: "prod" }
+    effect: allow
+    reason: "Production deploys stay gated by approvals"
+    require_approval_if: "risk.mode in ['review'] or risk.score >= 60"
+
+  - id: default-allow
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Allow remaining traffic when risk is low"

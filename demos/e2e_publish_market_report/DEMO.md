@@ -40,6 +40,19 @@ Then open the dashboard and use:
 
 With the approvals API and dashboard running, you can review tool call parameters and approve or deny the publication request.
 
+## Docker Compose
+To run the agent, approvals API, and dashboard via Docker:
+1) From `demos/e2e_publish_market_report/`, copy `.env.example` to `.env` and set the values (at minimum `GOOGLE_API_KEY`).
+2) From the repo root, start the long-running services:
+```bash
+docker compose --env-file demos/e2e_publish_market_report/.env -f demos/e2e_publish_market_report/docker-compose.yml up -d approvals dashboard --build
+```
+3) Run the agent as a one-off (re-run anytime):
+```bash
+docker compose --env-file demos/e2e_publish_market_report/.env -f demos/e2e_publish_market_report/docker-compose.yml run --rm agent
+```
+Approvals API: `http://localhost:8788`, dashboard: `http://localhost:3000` (defaults).
+
 ## Troubleshooting
 - If EdgeOne tools are missing or publish fails, the agent will output `EDGEONE_TOOL_MISSING` and stop.
 - Check `ctrl.db` for requests/events if the run halts unexpectedly.

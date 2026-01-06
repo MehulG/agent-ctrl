@@ -1,0 +1,18 @@
+risk:
+  mode: modes
+
+  modes:
+    safe:   { score: 10 }
+    review: { score: 50 }
+    danger: { score: 90 }
+
+  rules:
+    - name: docs-safe
+      when: { server: "docs", tool: "*" }
+      set_mode: safe
+      reason: "Docs server is read-only"
+
+  set_mode_by_score:
+    danger: "score >= 80"
+    review: "score >= 40"
+    safe:   "score < 40"

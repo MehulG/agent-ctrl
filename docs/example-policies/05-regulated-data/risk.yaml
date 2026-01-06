@@ -1,0 +1,66 @@
+risk:
+  mode: modes
+
+  modes:
+    safe:   { score: 5 }
+    review: { score: 60 }
+    danger: { score: 95 }
+
+  vars:
+    tokens_k: tokens / 1000
+    rows_norm: rows / 10000
+    prod_flag: env == "prod"
+
+  rules:
+    - name: model-prod-review
+      when: { server: "model-serve", env: "prod" }
+      set_mode: review
+      reason: "Prod model calls start at review"
+
+    - name: high-token-score
+      when:
+        server: "model-serve"
+        args:
+          tokens:
+            gte: 200000
+      score_expr: "max(score, 60 + min(tokens_k, 40) + (10 * prod_flag))"
+      reason: "Large context windows raise risk and cost"
+
+    - name: pii-broker-danger
+      when: { server: "pii-broker", tool: "*" }
+      set_mode: danger
+      reason: "PII broker is tightly controlled"
+
+    - name: secrets-danger
+      when: { server: "secrets", tool: "*" }
+      set_mode: danger
+      reason: "Secrets access is blocked"
+
+    - name: prod-deploy-review
+      when: { server: "deploy", env: "prod" }
+      escalate: one_level
+      reason: "Prod releases escalate one level"
+
+    - name: export-contains-pii
+      when:
+        server: "data-export"
+        args:
+          columns:
+            contains: "ssn"
+      set_mode: danger
+      reason: "PII export (SSN) is blocked"
+
+    - name: large-export-score
+      when:
+        server: "data-export"
+        env: "prod"
+        args:
+          rows:
+            gte: 100000
+      score_expr: "max(score, 70 + min(rows_norm, 30))"
+      reason: "Massive exports push toward danger"
+
+  set_mode_by_score:
+    danger: "score >= 90"
+    review: "score >= 60"
+    safe:   "score < 60"

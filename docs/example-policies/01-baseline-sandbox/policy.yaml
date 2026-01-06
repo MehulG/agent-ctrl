@@ -1,0 +1,6 @@
+policies:
+  - id: allow-baseline
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Baseline sandbox allow for demos"
+    deny: "risk.mode == 'danger'"

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from typing import Any, Dict, Optional
+import os
 
 import aiosqlite
 from fastapi import FastAPI, HTTPException
@@ -12,15 +14,24 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 
 from ctrl.config.loader import load_and_validate
+from ctrl.db.migrate import ensure_db
+
+# Quiet noisy session termination warnings when MCP servers return 404 on DELETE /mcp.
+logging.getLogger("mcp.client.streamable_http").setLevel(logging.ERROR)
 
 app = FastAPI(title="ctrl approvals")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_origin_regex=".*",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+DEFAULT_DB_PATH = os.environ.get("CTRL_DB_PATH", "ctrl.db")
+DEFAULT_SERVERS_PATH = os.environ.get("CTRL_SERVERS_PATH", "configs/servers.yaml")
+DEFAULT_POLICY_PATH = os.environ.get("CTRL_POLICY_PATH", "configs/policy.yaml")
 
 class ApproveBody(BaseModel):
     approved_by: Optional[str] = "human"
@@ -47,14 +58,18 @@ async def _event(db, request_id: str | None, type_: str, data: Dict[str, Any]):
         (str(uuid.uuid4()), _now_iso(), request_id, type_, json.dumps(data, separators=(",", ":"), sort_keys=True)),
     )
 
-def _connections_from_servers_yaml(servers_path: str) -> Dict[str, Dict[str, Any]]:
-    servers_cfg, _ = load_and_validate(servers_path=servers_path, policy_path="configs/policy.yaml")
+def _connections_from_servers_yaml(servers_path: str | None = None) -> Dict[str, Dict[str, Any]]:
+    servers_file = servers_path or DEFAULT_SERVERS_PATH
+    servers_cfg, _ = load_and_validate(servers_path=servers_file, policy_path=DEFAULT_POLICY_PATH)
     conns: Dict[str, Dict[str, Any]] = {}
     for s in servers_cfg.servers:
-        conns[s.name] = {"transport": s.transport, "url": s.base_url}
+        conn: Dict[str, Any] = {"transport": s.transport, "url": s.base_url}
+        if s.transport == "http":
+            conn["terminate_on_close"] = False
+        conns[s.name] = conn
     return conns
 
-async def _execute_tool(server: str, tool: str, args: Dict[str, Any], servers_path: str) -> Any:
+async def _execute_tool(server: str, tool: str, args: Dict[str, Any], servers_path: str | None = None) -> Any:
     conns = _connections_from_servers_yaml(servers_path)
     client = MultiServerMCPClient(conns, tool_interceptors=[], tool_name_prefix=False)
 
@@ -70,7 +85,7 @@ async def _execute_tool(server: str, tool: str, args: Dict[str, Any], servers_pa
 
 
 @app.get("/pending")
-async def pending(db_path: str = "ctrl.db"):
+async def pending(db_path: str = DEFAULT_DB_PATH):
     async with aiosqlite.connect(db_path) as db:
         rows = await _fetch_all(
             db,
@@ -96,7 +111,7 @@ async def pending(db_path: str = "ctrl.db"):
         ]
 
 @app.get("/requests")
-async def requests(db_path: str = "ctrl.db", status: Optional[str] = None, limit: int = 200):
+async def requests(db_path: str = DEFAULT_DB_PATH, status: Optional[str] = None, limit: int = 200):
     status_filter = None if status is None else status.strip().lower()
     safe_limit = max(1, min(limit, 500))
     async with aiosqlite.connect(db_path) as db:
@@ -137,7 +152,7 @@ async def requests(db_path: str = "ctrl.db", status: Optional[str] = None, limit
         ]
 
 @app.get("/status/{request_id}")
-async def status(request_id: str, db_path: str = "ctrl.db"):
+async def status(request_id: str, db_path: str = DEFAULT_DB_PATH):
     async with aiosqlite.connect(db_path) as db:
         r = await _fetch_one(
             db,
@@ -208,7 +223,7 @@ async def status(request_id: str, db_path: str = "ctrl.db"):
         }
 
 @app.post("/deny/{request_id}")
-async def deny(request_id: str, body: ApproveBody = ApproveBody(), db_path: str = "ctrl.db"):
+async def deny(request_id: str, body: ApproveBody = ApproveBody(), db_path: str = DEFAULT_DB_PATH):
     async with aiosqlite.connect(db_path) as db:
         r = await _fetch_one(db, "SELECT status FROM requests WHERE id = ?", (request_id,))
         if not r:
@@ -225,8 +240,8 @@ async def deny(request_id: str, body: ApproveBody = ApproveBody(), db_path: str 
 async def approve(
     request_id: str,
     body: ApproveBody = ApproveBody(),
-    db_path: str = "ctrl.db",
-    servers_path: str = "configs/servers.yaml",
+    db_path: str = DEFAULT_DB_PATH,
+    servers_path: str = DEFAULT_SERVERS_PATH,
 ):
     async with aiosqlite.connect(db_path) as db:
         r = await _fetch_one(
@@ -267,3 +282,9 @@ async def approve(
         await db.commit()
 
     return {"ok": True, "status": "executed"}
+
+
+@app.on_event("startup")
+async def _ensure_db():
+    # Create DB and apply migrations on startup so approvals API is ready to use.
+    ensure_db(db_path=DEFAULT_DB_PATH)

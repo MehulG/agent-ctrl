@@ -1,0 +1,23 @@
+policies:
+  - id: deny-danger
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Dangerous modes are blocked"
+    deny: "risk.mode == 'danger'"
+
+  - id: prod-deploy-approval
+    match: { server: "deploy", tool: "*", env: "prod" }
+    effect: allow
+    reason: "Production deploys need approval when risk is elevated"
+    require_approval_if: "risk.score >= 55"
+
+  - id: feature-flag-approval
+    match: { server: "feature-flags", tool: "*", env: "*" }
+    effect: allow
+    reason: "Feature flag changes require review when risky"
+    require_approval_if: "risk.score >= 55"
+
+  - id: default-allow
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Allow remaining requests when risk is low"
