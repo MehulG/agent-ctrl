@@ -1,0 +1,16 @@
+servers:
+  - name: deploy
+    transport: http
+    base_url: https://deploy.example.com/mcp
+
+  - name: feature-flags
+    transport: http
+    base_url: https://feature-flags.example.com/mcp
+
+  - name: observability
+    transport: http
+    base_url: https://observability.example.com/mcp
+
+  - name: audit
+    transport: http
+    base_url: https://audit.example.com/mcp

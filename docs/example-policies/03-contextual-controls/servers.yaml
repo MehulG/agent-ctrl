@@ -1,0 +1,12 @@
+servers:
+  - name: finance-read
+    transport: http
+    base_url: https://finance-read.example.com/mcp
+
+  - name: finance-write
+    transport: http
+    base_url: https://finance-write.example.com/mcp
+
+  - name: data-export
+    transport: http
+    base_url: https://data-export.example.com/mcp

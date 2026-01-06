@@ -7,7 +7,7 @@ services:
       dockerfile: demos/e2e_publish_market_report/Dockerfile
       target: backend
     environment:
-      CTRL_DB_PATH: ${CTRL_DB_PATH:-/data/ctrl.db}
+      CTRL_DB_PATH: ${CTRL_DB_PATH:-ctrl.db}
       CTRL_SERVERS_PATH: ${CTRL_SERVERS_PATH:-demos/e2e_publish_market_report/configs/servers.yaml}
       CTRL_POLICY_PATH: ${CTRL_POLICY_PATH:-demos/e2e_publish_market_report/configs/policy.yaml}
     volumes:
@@ -28,7 +28,7 @@ services:
       target: backend
     environment:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:?set GOOGLE_API_KEY}
-      CTRL_DB_PATH: ${CTRL_DB_PATH:-/data/ctrl.db}
+      CTRL_DB_PATH: ${CTRL_DB_PATH:-ctrl.db}
       CTRL_SERVERS_PATH: ${CTRL_SERVERS_PATH:-demos/e2e_publish_market_report/configs/servers.yaml}
       CTRL_POLICY_PATH: ${CTRL_POLICY_PATH:-demos/e2e_publish_market_report/configs/policy.yaml}
       CTRL_RISK_PATH: ${CTRL_RISK_PATH:-demos/e2e_publish_market_report/configs/risk.yaml}
@@ -52,11 +52,11 @@ services:
       target: dashboard
       args:
         NEXT_PUBLIC_CTRL_API_BASE: ${NEXT_PUBLIC_CTRL_API_BASE:-http://localhost:8788}
-        NEXT_PUBLIC_CTRL_DB_PATH: ${NEXT_PUBLIC_CTRL_DB_PATH:-/data/ctrl.db}
+        NEXT_PUBLIC_CTRL_DB_PATH: ${NEXT_PUBLIC_CTRL_DB_PATH:-ctrl.db}
         NEXT_PUBLIC_CTRL_SERVERS_PATH: ${NEXT_PUBLIC_CTRL_SERVERS_PATH:-demos/e2e_publish_market_report/configs/servers.yaml}
     environment:
       NEXT_PUBLIC_CTRL_API_BASE: ${NEXT_PUBLIC_CTRL_API_BASE:-http://localhost:8788}
-      NEXT_PUBLIC_CTRL_DB_PATH: ${NEXT_PUBLIC_CTRL_DB_PATH:-/data/ctrl.db}
+      NEXT_PUBLIC_CTRL_DB_PATH: ${NEXT_PUBLIC_CTRL_DB_PATH:-ctrl.db}
       NEXT_PUBLIC_CTRL_SERVERS_PATH: ${NEXT_PUBLIC_CTRL_SERVERS_PATH:-demos/e2e_publish_market_report/configs/servers.yaml}
     ports:
       - "0.0.0.0:3000:3000"

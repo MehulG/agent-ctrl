@@ -1,0 +1,37 @@
+risk:
+  mode: modes
+
+  modes:
+    safe:   { score: 10 }
+    review: { score: 50 }
+    danger: { score: 90 }
+
+  rules:
+    - name: observability-safe
+      when: { server: "observability", tool: "*" }
+      set_mode: safe
+      reason: "Logs and metrics are read-only"
+
+    - name: staging-deploy-safe
+      when: { server: "deploy", env: "staging" }
+      set_mode: safe
+      reason: "Staging deploys are low impact"
+
+    - name: prod-deploy-review
+      when: { server: "deploy", env: "prod" }
+      set_mode: review
+      reason: "Production deploys require review"
+
+    - name: sql-drop-danger
+      when:
+        server: "deploy"
+        args:
+          script:
+            contains: "DROP DATABASE"
+      set_mode: danger
+      reason: "Release script attempts to drop a database"
+
+  set_mode_by_score:
+    danger: "score >= 80"
+    review: "score >= 40"
+    safe:   "score < 40"

@@ -1,0 +1,8 @@
+servers:
+  - name: docs
+    transport: http
+    base_url: https://docs.example.com/mcp
+
+  - name: playground
+    transport: http
+    base_url: https://playground.example.com/mcp

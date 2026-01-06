@@ -1,0 +1,22 @@
+policies:
+  - id: deny-danger
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Dangerous actions are blocked"
+    deny: "risk.mode == 'danger'"
+
+  - id: allow-staging-deploys
+    match: { server: "deploy", tool: "*", env: "staging" }
+    effect: allow
+    reason: "Staging deploys are allowed"
+
+  - id: prod-deploy-approval
+    match: { server: "deploy", tool: "*", env: "prod" }
+    effect: allow
+    reason: "Production deploys require approval"
+    require_approval_if: "True"
+
+  - id: default-allow
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Allow remaining traffic"

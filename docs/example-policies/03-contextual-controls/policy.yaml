@@ -1,0 +1,23 @@
+policies:
+  - id: deny-danger
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Dangerous modes are auto-blocked"
+    deny: "risk.mode == 'danger'"
+
+  - id: prod-finance-approval
+    match: { server: "finance-write", tool: "*", env: "prod" }
+    effect: allow
+    reason: "Production finance writes require approval when risk is elevated"
+    require_approval_if: "risk.mode in ['review'] or risk.score >= 60"
+
+  - id: data-export-approval
+    match: { server: "data-export", tool: "*", env: "*" }
+    effect: allow
+    reason: "Data exports need approval when risk is high"
+    require_approval_if: "risk.score >= 50"
+
+  - id: default-allow
+    match: { server: "*", tool: "*", env: "*" }
+    effect: allow
+    reason: "Allow remaining calls when risk stays low"

@@ -1,0 +1,52 @@
+risk:
+  mode: modes
+
+  modes:
+    safe:   { score: 10 }
+    review: { score: 55 }
+    danger: { score: 90 }
+
+  vars:
+    # Provided by caller (0-23). Falls back to 0 if not present.
+    offhours: "(hour >= 22) or (hour <= 6)"
+    change_size: files_changed
+
+  rules:
+    - name: observability-safe
+      when: { server: "observability", tool: "*" }
+      set_mode: safe
+      reason: "Metrics/logs are read-only"
+
+    - name: prod-deploy-review
+      when: { server: "deploy", env: "prod" }
+      set_mode: review
+      reason: "Production deploys start in review"
+
+    - name: offhours-bump
+      when: { server: "deploy", env: "*" }
+      score_expr: "score + (20 * offhours)"
+      reason: "Off-hours deploys increase risk"
+
+    - name: large-change-score
+      when:
+        server: "deploy"
+        env: "prod"
+        args:
+          files_changed:
+            gte: 50
+      score_expr: "max(score, 70 + min(change_size or 0, 100)/4)"
+      reason: "Large releases push toward review/danger"
+
+    - name: dangerous-script-block
+      when:
+        server: "deploy"
+        args:
+          script:
+            contains: "DROP TABLE"
+      set_mode: danger
+      reason: "Release script contains destructive SQL"
+
+  set_mode_by_score:
+    danger: "score >= 85"
+    review: "score >= 55"
+    safe:   "score < 55"

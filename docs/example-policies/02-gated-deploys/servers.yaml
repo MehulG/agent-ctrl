@@ -1,0 +1,8 @@
+servers:
+  - name: deploy
+    transport: http
+    base_url: https://deploy.example.com/mcp
+
+  - name: observability
+    transport: http
+    base_url: https://observability.example.com/mcp

@@ -1,0 +1,20 @@
+servers:
+  - name: model-serve
+    transport: http
+    base_url: https://model-serve.example.com/mcp
+
+  - name: data-export
+    transport: http
+    base_url: https://data-export.example.com/mcp
+
+  - name: pii-broker
+    transport: http
+    base_url: https://pii-broker.example.com/mcp
+
+  - name: secrets
+    transport: http
+    base_url: https://secrets.example.com/mcp
+
+  - name: deploy
+    transport: http
+    base_url: https://deploy.example.com/mcp

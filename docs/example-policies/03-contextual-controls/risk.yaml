@@ -1,0 +1,44 @@
+risk:
+  mode: modes
+
+  modes:
+    safe:   { score: 10 }
+    review: { score: 55 }
+    danger: { score: 90 }
+
+  vars:
+    amount_norm: "(args.get('amount', 0) or 0) / 1000"
+
+  rules:
+    - name: finance-read-safe
+      when: { server: "finance-read", tool: "*" }
+      set_mode: safe
+      reason: "Read-only financial queries"
+
+    - name: prod-finance-escalate
+      when: { server: "finance-write", env: "prod" }
+      escalate: one_level
+      reason: "Production writes need more scrutiny"
+
+    - name: large-transfer-score
+      when:
+        server: "finance-write"
+        args:
+          amount:
+            gte: 50000
+      score_expr: "max(score, 70 + amount_norm)"
+      reason: "Large transfers push risk toward danger"
+
+    - name: pii-export-danger
+      when:
+        server: "data-export"
+        args:
+          columns:
+            contains: "ssn"
+      set_mode: danger
+      reason: "PII export (SSN) is blocked"
+
+  set_mode_by_score:
+    danger: "score >= 80"
+    review: "score >= 50"
+    safe:   "score < 50"
