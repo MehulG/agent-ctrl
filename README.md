@@ -38,10 +38,7 @@ agents propose actions, Ctrl authorizes and executes them safely.
 
 ## Demo
 
-
-
-https://github.com/user-attachments/assets/93ea607c-d77b-4314-8767-62ca51c80d78
-
+https://github.com/user-attachments/assets/495c542f-b222-4f3f-ad90-6b6c82e2325a
 
 ---
 
