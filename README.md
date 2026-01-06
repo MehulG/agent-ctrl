@@ -36,8 +36,12 @@ agents propose actions, Ctrl authorizes and executes them safely.
 
 ---
 
-## Demo video
-[assets/demo.mp4](assets/demo.mp4)
+## Demo
+
+
+
+https://github.com/user-attachments/assets/93ea607c-d77b-4314-8767-62ca51c80d78
+
 
 ---
 
