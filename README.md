@@ -234,6 +234,8 @@ tools = await mcp.get_tools()
 Tool calls now flow through:
 **log intent → score risk → decide policy → enforce → execute**.
 
+More example policy/risk/server bundles live in `docs/example-policies/`.
+
 ---
 
 ## Audit trail (SQLite)
