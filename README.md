@@ -14,7 +14,7 @@ and executes only what’s authorized — with a full, auditable ledger.
 
 ---
 
-## Why Ctrl exists (the bigger picture)
+## Why Ctrl exists
 
 AI agents are moving from **reading and drafting** to **acting**:
 sending emails, issuing refunds, publishing content, changing production systems.
@@ -74,6 +74,16 @@ curl http://127.0.0.1:8788/status/<id>
 # or open the dashboard UI (default http://localhost:3000)
 ```
 
+Start the dashboard UI locally:
+
+```bash
+cd dashboard
+yarn dev --hostname 0.0.0.0 --port 3000
+```
+
+Approvals API: http://localhost:8788  
+Dashboard UI: http://localhost:3000
+
 ---
 
 ## Docker (agent + approvals + dashboard)
@@ -89,6 +99,9 @@ docker compose --env-file demos/e2e_publish_market_report/.env \
   -f demos/e2e_publish_market_report/docker-compose.yml \
   up -d approvals dashboard --build
 ```
+
+Approvals API: http://localhost:8788  
+Dashboard UI: http://localhost:3000
 
 3. Run the agent:
 
@@ -234,7 +247,7 @@ tools = await mcp.get_tools()
 Tool calls now flow through:
 **log intent → score risk → decide policy → enforce → execute**.
 
-More example policy/risk/server bundles live in `docs/example-policies/`.
+More example for policy/risk/server bundles live in `docs/example-policies/`.
 
 ---
 

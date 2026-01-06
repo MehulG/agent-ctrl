@@ -14,6 +14,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 
 from ctrl.config.loader import load_and_validate
+from ctrl.db.migrate import ensure_db
 
 # Quiet noisy session termination warnings when MCP servers return 404 on DELETE /mcp.
 logging.getLogger("mcp.client.streamable_http").setLevel(logging.ERROR)
@@ -281,3 +282,9 @@ async def approve(
         await db.commit()
 
     return {"ok": True, "status": "executed"}
+
+
+@app.on_event("startup")
+async def _ensure_db():
+    # Create DB and apply migrations on startup so approvals API is ready to use.
+    ensure_db(db_path=DEFAULT_DB_PATH)
